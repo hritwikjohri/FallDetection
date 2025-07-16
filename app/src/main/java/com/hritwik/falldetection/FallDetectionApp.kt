@@ -1,5 +1,6 @@
 package com.hritwik.falldetection
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,8 +32,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,7 +47,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,6 +67,7 @@ import com.hritwik.falldetection.ui.components.FallDetectionMetrics
 import com.hritwik.falldetection.ui.components.FallRiskIndicator
 import com.hritwik.falldetection.ui.components.SensorVisualizationCard
 import com.hritwik.falldetection.viewmodel.FallDetectionViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FallDetectionApp(
@@ -155,7 +159,7 @@ fun FallDetectionApp(
                 item {
                     SensorVisualizationCard(
                         sensorManager = sensorManager,
-                        isMonitoring = isMonitoring
+                        isMonitoring = true
                     )
                 }
 
@@ -176,7 +180,7 @@ fun FallDetectionApp(
                 item {
                     FallDetectionMetrics(
                         sensorManager = sensorManager,
-                        isMonitoring = isMonitoring
+                        isMonitoring = true
                     )
                 }
             }
@@ -344,7 +348,7 @@ fun LiveSensorDataCard(
                     magnitude = sensorManager.calculateMagnitude(reading.gyroscope)
                 )
 
-                Divider()
+                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
 
                 Text(
                     text = "Last Update: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(reading.timestamp))}",
@@ -356,6 +360,7 @@ fun LiveSensorDataCard(
     }
 }
 
+@SuppressLint("DefaultLocale")
 @Composable
 fun SensorDataRow(
     label: String,
@@ -392,14 +397,15 @@ fun SensorDataRow(
     }
 }
 
+@SuppressLint("DefaultLocale")
 @Composable
 fun DetectionConfigCard(
     onUpdateThresholds: (Float, Float, Float) -> Unit,
     onResetDetector: () -> Unit
 ) {
-    var freeFallThreshold by remember { mutableStateOf(3.0f) }
-    var impactThreshold by remember { mutableStateOf(20.0f) }
-    var rotationThreshold by remember { mutableStateOf(3.0f) }
+    var freeFallThreshold by remember { mutableFloatStateOf(3.0f) }
+    var impactThreshold by remember { mutableFloatStateOf(20.0f) }
+    var rotationThreshold by remember { mutableFloatStateOf(3.0f) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -627,7 +633,7 @@ fun EmergencyAlertDialog(
     onEmergencyCall: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var countdown by remember { mutableStateOf(30) }
+    var countdown by remember { mutableIntStateOf(30) }
 
     LaunchedEffect(Unit) {
         while (countdown > 0) {

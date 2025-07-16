@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.sqrt
 
-class FallDetectionSensorManager(private val context: Context) : SensorEventListener {
+class FallDetectionSensorManager(context: Context) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -191,14 +191,6 @@ class FallDetectionSensorManager(private val context: Context) : SensorEventList
                     vector.second * vector.second +
                     vector.third * vector.third
         )
-    }
-
-    fun getAccelerometerMagnitude(): Float {
-        return calculateMagnitude(latestAccel)
-    }
-
-    fun getGyroscopeMagnitude(): Float {
-        return calculateMagnitude(latestGyro)
     }
 
     fun getRecentAccelerations(): List<Float> {

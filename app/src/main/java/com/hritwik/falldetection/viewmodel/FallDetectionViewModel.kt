@@ -6,7 +6,6 @@ import com.hritwik.falldetection.mdoel.FallDetectionUiState
 import com.hritwik.falldetection.sensors.FallDetectionSensorManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class FallDetectionViewModel(
@@ -20,11 +19,9 @@ class FallDetectionViewModel(
     val currentPhase = sensorManager.currentPhase
     val fallEvents = sensorManager.fallEvents
     val debugInfo = sensorManager.debugInfo
-    val sensorInfo = sensorManager.sensorInfo
 
     // UI state
     private val _uiState = MutableStateFlow(FallDetectionUiState())
-    val uiState: StateFlow<FallDetectionUiState> = _uiState.asStateFlow()
 
     fun startMonitoring() {
         viewModelScope.launch {
@@ -56,15 +53,9 @@ class FallDetectionViewModel(
     }
 
     fun resetFallAlert() {
-        // The sensor manager handles the fall detected state
-        // This is mainly for UI feedback
         _uiState.value = _uiState.value.copy(
             fallAlertDismissed = true
         )
-    }
-
-    fun clearErrorMessage() {
-        _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
     override fun onCleared() {

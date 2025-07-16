@@ -1,5 +1,6 @@
 package com.hritwik.falldetection
 
+import android.annotation.SuppressLint
 import com.hritwik.falldetection.mdoel.FallEvent
 import com.hritwik.falldetection.mdoel.FallPhase
 import com.hritwik.falldetection.mdoel.SensorReading
@@ -15,7 +16,6 @@ class FallDetector {
         private const val WINDOW_SIZE = 50
         private const val MIN_FALL_DURATION = 200L // milliseconds
         private const val MAX_FALL_DURATION = 2000L // milliseconds
-        private const val GRAVITY = 9.81f // m/s²
 
         // Default thresholds based on research
         private const val DEFAULT_FREE_FALL_THRESHOLD = 3.0f // Below this = potential free fall
@@ -56,8 +56,8 @@ class FallDetector {
 
         return when (_currentPhase.value) {
             FallPhase.NORMAL -> checkForFreeFall(reading, accelMagnitude)
-            FallPhase.FREE_FALL -> checkForImpact(reading, accelMagnitude, gyroMagnitude)
-            FallPhase.IMPACT -> checkPostImpact(reading, accelMagnitude, gyroMagnitude)
+            FallPhase.FREE_FALL -> checkForImpact(reading, accelMagnitude)
+            FallPhase.IMPACT -> checkPostImpact(reading)
             FallPhase.POST_IMPACT -> checkFallCompletion(reading)
             FallPhase.FALL_DETECTED -> handleFallDetected(reading)
         }
@@ -86,7 +86,7 @@ class FallDetector {
         return false
     }
 
-    private fun checkForImpact(reading: SensorReading, accelMagnitude: Float, gyroMagnitude: Float): Boolean {
+    private fun checkForImpact(reading: SensorReading, accelMagnitude: Float): Boolean {
         val freeFallStart = freeFallStartTime ?: return resetToNormal()
         val freeFallDuration = reading.timestamp - freeFallStart
 
@@ -108,7 +108,7 @@ class FallDetector {
         return false
     }
 
-    private fun checkPostImpact(reading: SensorReading, accelMagnitude: Float, gyroMagnitude: Float): Boolean {
+    private fun checkPostImpact(reading: SensorReading): Boolean {
         val impactTime = impactDetectedTime ?: return resetToNormal()
 
         // Phase 3: Analyze gyroscope for rotation patterns
@@ -132,10 +132,10 @@ class FallDetector {
         // Phase 4: Verify post-impact movement patterns
         val confidence = calculateFallConfidence()
 
-        if (confidence > 0.7f) {
-            return detectFall(reading, confidence)
+        return if (confidence > 0.7f) {
+            detectFall(reading, confidence)
         } else {
-            return resetToNormal()
+            resetToNormal()
         }
     }
 
@@ -190,17 +190,16 @@ class FallDetector {
 
         // Factor 1: Free fall duration (optimal range: 200-800ms)
         val freeFallDuration = impactTime - freeFallStart
-        val durationScore = when {
-            freeFallDuration in 200..800 -> 0.3f
-            freeFallDuration in 100..1200 -> 0.2f
+        val durationScore = when (freeFallDuration) {
+            in 200..800 -> 0.3f
+            in 100..1200 -> 0.2f
             else -> 0.1f
         }
         confidence += durationScore
 
         // Factor 2: Impact magnitude
-        val maxImpact = sensorBuffer.takeLast(10)
-            .map { calculateMagnitude(it.accelerometer) }
-            .maxOrNull() ?: 0f
+        val maxImpact =
+            sensorBuffer.takeLast(10).maxOfOrNull { calculateMagnitude(it.accelerometer) } ?: 0f
         val impactScore = when {
             maxImpact > 25f -> 0.3f
             maxImpact > 15f -> 0.2f
@@ -267,6 +266,7 @@ class FallDetector {
         }
     }
 
+    @SuppressLint("DefaultLocale")
     private fun updateDebugInfo(reading: SensorReading, accelMag: Float, gyroMag: Float) {
         val freeFallDuration = freeFallStartTime?.let { reading.timestamp - it } ?: 0
 
