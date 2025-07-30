@@ -15,9 +15,9 @@ import android.os.Vibrator
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
-import com.hritwik.falldetection.mdoel.AlertType
-import com.hritwik.falldetection.mdoel.EmergencyAlert
-import com.hritwik.falldetection.mdoel.EmergencyContact
+import com.hritwik.falldetection.model.AlertType
+import com.hritwik.falldetection.model.EmergencyAlert
+import com.hritwik.falldetection.model.EmergencyContact
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

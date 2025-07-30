@@ -11,61 +11,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Emergency
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Update
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.hritwik.falldetection.mdoel.AlertType
-import com.hritwik.falldetection.mdoel.EmergencyAlert
-import com.hritwik.falldetection.mdoel.FallEvent
-import com.hritwik.falldetection.mdoel.FallPhase
-import com.hritwik.falldetection.mdoel.SensorReading
+import com.hritwik.falldetection.health.HealthDataManager
+import com.hritwik.falldetection.location.LocationManager
+import com.hritwik.falldetection.model.AlertType
+import com.hritwik.falldetection.model.EmergencyAlert
+import com.hritwik.falldetection.model.FallEvent
+import com.hritwik.falldetection.model.FallPhase
+import com.hritwik.falldetection.model.MqttConnectionStatus
+import com.hritwik.falldetection.model.SensorReading
+import com.hritwik.falldetection.model.TransmissionStats
+import com.hritwik.falldetection.mqtt.MqttManager
 import com.hritwik.falldetection.sensors.FallDetectionSensorManager
-import com.hritwik.falldetection.ui.components.FallDetectionMetrics
-import com.hritwik.falldetection.ui.components.FallRiskIndicator
-import com.hritwik.falldetection.ui.components.SensorVisualizationCard
+import com.hritwik.falldetection.service.DataTransmissionService
+import com.hritwik.falldetection.ui.components.*
 import com.hritwik.falldetection.viewmodel.FallDetectionViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,24 +40,53 @@ import com.hritwik.falldetection.viewmodel.FallDetectionViewModel
 fun FallDetectionApp(
     sensorManager: FallDetectionSensorManager,
     emergencySystem: EmergencySystem,
+    healthDataManager: HealthDataManager,
+    locationManager: LocationManager,
+    mqttManager: MqttManager,
+    dataTransmissionService: DataTransmissionService,
     viewModel: FallDetectionViewModel = viewModel { FallDetectionViewModel(sensorManager) }
 ) {
+    // Sensor states
     val isMonitoring by viewModel.isMonitoring.collectAsState()
     val fallDetected by viewModel.fallDetected.collectAsState()
     val currentPhase by viewModel.currentPhase.collectAsState()
-    val sensorReading by viewModel.currentSensorReading.collectAsState()
     val fallEvents by viewModel.fallEvents.collectAsState()
+    val currentSensorReading by viewModel.currentSensorReading.collectAsState()
     val debugInfo by viewModel.debugInfo.collectAsState()
+
+    // Health data states
+    val currentHeartRate by healthDataManager.currentHeartRate.collectAsState()
+    val currentOxygen by healthDataManager.currentOxygen.collectAsState()
+    val heartRateHistory by healthDataManager.heartRateHistory.collectAsState()
+    val oxygenHistory by healthDataManager.oxygenHistory.collectAsState()
+
+    // Location states
+    val currentLocation by locationManager.currentLocation.collectAsState()
+    val isLocationEnabled by locationManager.isLocationEnabled.collectAsState()
+
+    // MQTT states
+    val mqttConnectionStatus by mqttManager.connectionStatus.collectAsState()
+    val messagesSent by mqttManager.messagesSent.collectAsState()
+
+    // Transmission states
+    val isTransmitting by dataTransmissionService.isTransmitting.collectAsState()
+    val transmissionStats by dataTransmissionService.transmissionStats.collectAsState()
+
+    // Emergency states
     val isEmergencyMode by emergencySystem.isEmergencyMode.collectAsState()
 
-    // Trigger emergency system when fall is detected
+    // Handle fall detection
     LaunchedEffect(fallDetected) {
         if (fallDetected) {
             emergencySystem.triggerEmergencyAlert(AlertType.FALL_DETECTION)
+            // Also send fall data via MQTT if we have recent fall events
+            fallEvents.lastOrNull()?.let { fallEvent ->
+                dataTransmissionService.triggerFallDetectedSOS(fallEvent)
+            }
         }
     }
 
-    // Show fall alert
+    // Show emergency alert dialog
     if (isEmergencyMode) {
         EmergencyAlertDialog(
             onEmergencyCall = {
@@ -116,16 +112,46 @@ fun FallDetectionApp(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Fall Detection") },
+                title = {
+                    Column {
+                        Text("Fall Detection")
+                        Text(
+                            text = when (currentPhase) {
+                                FallPhase.NORMAL -> "Monitoring"
+                                FallPhase.FREE_FALL -> "Free Fall Detected"
+                                FallPhase.IMPACT -> "Impact Detected"
+                                FallPhase.POST_IMPACT -> "Analyzing..."
+                                FallPhase.FALL_DETECTED -> "FALL DETECTED!"
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = when (currentPhase) {
                         FallPhase.NORMAL -> MaterialTheme.colorScheme.primary
-                        FallPhase.FREE_FALL -> Color(0xFFFF9800) // Orange
-                        FallPhase.IMPACT -> Color(0xFFF44336) // Red
-                        FallPhase.POST_IMPACT -> Color(0xFF9C27B0) // Purple
-                        FallPhase.FALL_DETECTED -> Color(0xFFD32F2F) // Dark Red
+                        FallPhase.FREE_FALL -> Color(0xFFFF9800)
+                        FallPhase.IMPACT -> Color(0xFFF44336)
+                        FallPhase.POST_IMPACT -> Color(0xFF9C27B0)
+                        FallPhase.FALL_DETECTED -> Color(0xFFD32F2F)
                     }
-                )
+                ),
+                actions = {
+                    // MQTT Connection Status Indicator
+                    Icon(
+                        imageVector = when (mqttConnectionStatus) {
+                            MqttConnectionStatus.CONNECTED -> Icons.Default.CloudDone
+                            MqttConnectionStatus.CONNECTING -> Icons.Default.CloudSync
+                            MqttConnectionStatus.DISCONNECTED -> Icons.Default.CloudOff
+                        },
+                        contentDescription = "MQTT Status",
+                        tint = when (mqttConnectionStatus) {
+                            MqttConnectionStatus.CONNECTED -> Color.Green
+                            MqttConnectionStatus.CONNECTING -> Color.Blue
+                            MqttConnectionStatus.DISCONNECTED -> Color.Red
+                        }
+                    )
+                }
             )
         }
     ) { paddingValues ->
@@ -136,21 +162,67 @@ fun FallDetectionApp(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Monitoring Control
+            // SOS Button - Always visible at top
             item {
-                MonitoringControlCard(
-                    isMonitoring = isMonitoring,
-                    currentPhase = currentPhase,
-                    onStartMonitoring = viewModel::startMonitoring,
-                    onStopMonitoring = viewModel::stopMonitoring
+                SOSButton(
+                    onSOSPressed = {
+                        dataTransmissionService.triggerManualSOS()
+                        emergencySystem.triggerEmergencyAlert(AlertType.MANUAL_TRIGGER)
+                    }
                 )
             }
 
-            // Live Sensor Data
+            // System Control Card
+            item {
+                SystemControlCard(
+                    isMonitoring = isMonitoring,
+                    isTransmitting = isTransmitting,
+                    mqttConnectionStatus = mqttConnectionStatus,
+                    onStartMonitoring = viewModel::startMonitoring,
+                    onStopMonitoring = viewModel::stopMonitoring,
+                    onStartTransmission = { dataTransmissionService.startTransmission() },
+                    onStopTransmission = { dataTransmissionService.stopTransmission() },
+                    onConnectMqtt = { mqttManager.connect() },
+                    onDisconnectMqtt = { mqttManager.disconnect() }
+                )
+            }
+
+            // Health Monitoring Card
+            item {
+                HealthMonitoringCard(
+                    heartRateData = currentHeartRate,
+                    oxygenData = currentOxygen,
+                    locationData = currentLocation,
+                    isTransmitting = isTransmitting
+                )
+            }
+
+            // Transmission Statistics
+            if (isTransmitting) {
+                item {
+                    TransmissionStatsCard(
+                        stats = transmissionStats,
+                        messagesSent = messagesSent
+                    )
+                }
+            }
+
+            // Health Data Charts
+            if (heartRateHistory.isNotEmpty() || oxygenHistory.isNotEmpty()) {
+                item {
+                    HealthDataChart(
+                        heartRateHistory = heartRateHistory,
+                        oxygenHistory = oxygenHistory
+                    )
+                }
+            }
+
+            // Original fall detection components
             if (isMonitoring) {
+                // Live Sensor Data
                 item {
                     LiveSensorDataCard(
-                        sensorReading = sensorReading,
+                        sensorReading = currentSensorReading,
                         sensorManager = sensorManager
                     )
                 }
@@ -164,12 +236,12 @@ fun FallDetectionApp(
                 }
 
                 // Fall Risk Indicator
-                sensorReading?.let { reading ->
+                currentSensorReading?.let { reading ->
                     item {
                         FallRiskIndicator(
                             currentAcceleration = sensorManager.calculateMagnitude(reading.accelerometer),
                             currentRotation = sensorManager.calculateMagnitude(reading.gyroscope),
-                            freeFallThreshold = 3.0f, // These should come from viewModel
+                            freeFallThreshold = 3.0f,
                             impactThreshold = 20.0f,
                             rotationThreshold = 3.0f
                         )
@@ -215,6 +287,247 @@ fun FallDetectionApp(
     }
 }
 
+@Composable
+fun SystemControlCard(
+    isMonitoring: Boolean,
+    isTransmitting: Boolean,
+    mqttConnectionStatus: MqttConnectionStatus,
+    onStartMonitoring: () -> Unit,
+    onStopMonitoring: () -> Unit,
+    onStartTransmission: () -> Unit,
+    onStopTransmission: () -> Unit,
+    onConnectMqtt: () -> Unit,
+    onDisconnectMqtt: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null)
+                Text(
+                    text = "System Control",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Monitoring Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onStartMonitoring,
+                    enabled = !isMonitoring,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Monitor")
+                }
+
+                Button(
+                    onClick = onStopMonitoring,
+                    enabled = isMonitoring,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Stop")
+                }
+            }
+
+            // Transmission Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onStartTransmission,
+                    enabled = !isTransmitting,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Start Data")
+                }
+
+                Button(
+                    onClick = onStopTransmission,
+                    enabled = isTransmitting,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Stop Data")
+                }
+            }
+
+            // MQTT Status and Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = when (mqttConnectionStatus) {
+                            MqttConnectionStatus.CONNECTED -> Icons.Default.CloudDone
+                            MqttConnectionStatus.CONNECTING -> Icons.Default.CloudSync
+                            MqttConnectionStatus.DISCONNECTED -> Icons.Default.CloudOff
+                        },
+                        contentDescription = null,
+                        tint = when (mqttConnectionStatus) {
+                            MqttConnectionStatus.CONNECTED -> Color.Green
+                            MqttConnectionStatus.CONNECTING -> Color.Blue
+                            MqttConnectionStatus.DISCONNECTED -> Color.Red
+                        }
+                    )
+                    Text(
+                        text = "MQTT: ${mqttConnectionStatus.name}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedButton(
+                        onClick = onConnectMqtt,
+                        enabled = mqttConnectionStatus != MqttConnectionStatus.CONNECTED
+                    ) {
+                        Text("Connect")
+                    }
+
+                    if (mqttConnectionStatus == MqttConnectionStatus.CONNECTED) {
+                        OutlinedButton(onClick = onDisconnectMqtt) {
+                            Text("Disconnect")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@SuppressLint("DefaultLocale")
+@Composable
+fun TransmissionStatsCard(
+    stats: TransmissionStats,
+    messagesSent: Int
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Analytics, contentDescription = null)
+                Text(
+                    text = "Transmission Statistics",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Statistics Grid
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatItem(
+                    label = "Heart Rate",
+                    value = "${stats.heartRateMessagesSent}",
+                    color = Color.Red
+                )
+                StatItem(
+                    label = "Oxygen",
+                    value = "${stats.oxygenMessagesSent}",
+                    color = Color.Blue
+                )
+                StatItem(
+                    label = "Location",
+                    value = "${stats.locationMessagesSent}",
+                    color = Color.Green
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatItem(
+                    label = "SOS",
+                    value = "${stats.sosMessagesSent}",
+                    color = Color.Red
+                )
+                StatItem(
+                    label = "Falls",
+                    value = "${stats.fallDetectionMessagesSent}",
+                    color = Color.Magenta
+                )
+                StatItem(
+                    label = "Errors",
+                    value = "${stats.errorCount}",
+                    color = if (stats.errorCount > 0) Color.Red else Color.Gray
+                )
+            }
+
+            if (stats.errorCount == 0 && messagesSent > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color.Green
+                    )
+                    Text(
+                        text = "All systems operational",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Green
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatItem(
+    label: String,
+    value: String,
+    color: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            color = color,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// Keep all the existing composables from the original file
 @Composable
 fun MonitoringControlCard(
     isMonitoring: Boolean,
@@ -264,6 +577,7 @@ fun MonitoringControlCard(
                             FallPhase.IMPACT -> Icons.Default.Error
                             FallPhase.POST_IMPACT -> Icons.Default.Info
                             FallPhase.FALL_DETECTED -> Icons.Default.Emergency
+                            else -> Icons.Default.Info
                         },
                         contentDescription = null,
                         tint = when (currentPhase) {
@@ -272,6 +586,7 @@ fun MonitoringControlCard(
                             FallPhase.IMPACT -> Color.Red
                             FallPhase.POST_IMPACT -> Color(0xFF9C27B0)
                             FallPhase.FALL_DETECTED -> Color.Red
+                            else -> Color.Black
                         }
                     )
                     Text(
@@ -348,7 +663,7 @@ fun LiveSensorDataCard(
                     magnitude = sensorManager.calculateMagnitude(reading.gyroscope)
                 )
 
-                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+                HorizontalDivider()
 
                 Text(
                     text = "Last Update: ${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(reading.timestamp))}",
@@ -394,109 +709,6 @@ fun SensorDataRow(
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.primary
         )
-    }
-}
-
-@SuppressLint("DefaultLocale")
-@Composable
-fun DetectionConfigCard(
-    onUpdateThresholds: (Float, Float, Float) -> Unit,
-    onResetDetector: () -> Unit
-) {
-    var freeFallThreshold by remember { mutableFloatStateOf(3.0f) }
-    var impactThreshold by remember { mutableFloatStateOf(20.0f) }
-    var rotationThreshold by remember { mutableFloatStateOf(3.0f) }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = null)
-                Text(
-                    text = "Detection Configuration",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Free Fall Threshold
-            Column {
-                Text("Free Fall Threshold: ${String.format("%.1f", freeFallThreshold)} m/s²")
-                Text(
-                    text = "Lower values = more sensitive",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = freeFallThreshold,
-                    onValueChange = { freeFallThreshold = it },
-                    valueRange = 1.0f..8.0f,
-                    steps = 28
-                )
-            }
-
-            // Impact Threshold
-            Column {
-                Text("Impact Threshold: ${String.format("%.1f", impactThreshold)} m/s²")
-                Text(
-                    text = "Higher values = less sensitive",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = impactThreshold,
-                    onValueChange = { impactThreshold = it },
-                    valueRange = 10.0f..40.0f,
-                    steps = 30
-                )
-            }
-
-            // Rotation Threshold
-            Column {
-                Text("Rotation Threshold: ${String.format("%.1f", rotationThreshold)} rad/s")
-                Text(
-                    text = "Rotation sensitivity during fall",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = rotationThreshold,
-                    onValueChange = { rotationThreshold = it },
-                    valueRange = 1.0f..10.0f,
-                    steps = 18
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        onUpdateThresholds(freeFallThreshold, impactThreshold, rotationThreshold)
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Update, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Update")
-                }
-
-                OutlinedButton(
-                    onClick = onResetDetector,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Reset")
-                }
-            }
-        }
     }
 }
 
@@ -626,73 +838,4 @@ fun SensorInfoCard(sensorManager: FallDetectionSensorManager) {
             }
         }
     }
-}
-
-@Composable
-fun EmergencyAlertDialog(
-    onEmergencyCall: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var countdown by remember { mutableIntStateOf(30) }
-
-    LaunchedEffect(Unit) {
-        while (countdown > 0) {
-            kotlinx.coroutines.delay(1000)
-            countdown--
-        }
-        if (countdown == 0) {
-            onEmergencyCall()
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = { /* Don't allow dismissing by clicking outside */ },
-        icon = {
-            Icon(
-                Icons.Default.Emergency,
-                contentDescription = null,
-                tint = Color.Red
-            )
-        },
-        title = {
-            Text(
-                text = "🚨 FALL DETECTED!",
-                color = Color.Red,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("A fall has been detected!")
-                Text("Emergency services will be called automatically in:")
-                Text(
-                    text = "$countdown seconds",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.Red,
-                    fontWeight = FontWeight.Bold
-                )
-                Text("Are you okay?")
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onEmergencyCall,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Red
-                )
-            ) {
-                Icon(Icons.Default.Phone, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Call Now")
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("I'm OK - Cancel")
-            }
-        }
-    )
 }

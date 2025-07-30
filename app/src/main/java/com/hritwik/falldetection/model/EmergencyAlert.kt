@@ -1,4 +1,4 @@
-package com.hritwik.falldetection.mdoel
+package com.hritwik.falldetection.model
 
 import android.location.Location
 

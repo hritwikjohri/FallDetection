@@ -9,7 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.hritwik.falldetection.FallDetector
-import com.hritwik.falldetection.mdoel.SensorReading
+import com.hritwik.falldetection.model.SensorReading
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

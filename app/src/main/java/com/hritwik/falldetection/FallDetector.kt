@@ -1,9 +1,9 @@
 package com.hritwik.falldetection
 
 import android.annotation.SuppressLint
-import com.hritwik.falldetection.mdoel.FallEvent
-import com.hritwik.falldetection.mdoel.FallPhase
-import com.hritwik.falldetection.mdoel.SensorReading
+import com.hritwik.falldetection.model.FallEvent
+import com.hritwik.falldetection.model.FallPhase
+import com.hritwik.falldetection.model.SensorReading
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

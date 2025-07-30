@@ -2,7 +2,7 @@ package com.hritwik.falldetection.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.hritwik.falldetection.mdoel.FallDetectionUiState
+import com.hritwik.falldetection.model.FallDetectionUiState
 import com.hritwik.falldetection.sensors.FallDetectionSensorManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

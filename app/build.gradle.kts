@@ -53,6 +53,13 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.material.icons.extended)
+    implementation(libs.org.eclipse.paho.client.mqttv3)
+    implementation(libs.org.eclipse.paho.android.service){
+        exclude(group = "com.android.support")
+    }
+    implementation(libs.play.services.location)
+    implementation(libs.json)
+    implementation(libs.accompanist.permissions)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
