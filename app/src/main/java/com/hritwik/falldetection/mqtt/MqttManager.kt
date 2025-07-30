@@ -1,4 +1,3 @@
-// app/src/main/java/com/hritwik/falldetection/mqtt/HiveMqttManager.kt
 package com.hritwik.falldetection.mqtt
 
 import android.content.Context
