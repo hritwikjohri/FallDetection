@@ -25,7 +25,7 @@ class MqttManager(
     private var socket: Socket? = null
     private var writer: BufferedWriter? = null
     private var reader: BufferedReader? = null
-    private val deviceId = UUID.randomUUID().toString()
+    private val deviceId = "hritwik"
 
     // HiveMQ Cloud configuration
     private val serverHost = "10.10.2.224" // Free public broker
@@ -282,7 +282,7 @@ class MqttManager(
         )
         val customMessage = createCustomMqttMessage("WATCH_HEALTH", healthData)
         val payload = createWatchHealthPayload(heartRateData, oxygenData, activityLevel)
-        publishMessage(getWatchHealthTopic(), payload, qos = 1, messageType = "WATCH_HEALTH")
+        publishMessage(getWatchHealthTopic(), payload, qos = 2, messageType = "WATCH_HEALTH")
     }
 
     fun publishDeviceStatus(status: String, batteryLevel: Int? = null, signalStrength: Int? = null) {
@@ -489,7 +489,6 @@ class MqttManager(
             put("priority", "critical")
             put("data", JSONObject().apply {
                 put("fallDetected", true)
-                put("confidence", fallEvent.confidence)
                 put("phase", fallEvent.phase.name)
                 put("details", fallEvent.details)
                 put("severity", when {
